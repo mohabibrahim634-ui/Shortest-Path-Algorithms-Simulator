@@ -1,0 +1,133 @@
+#include <iostream>
+#include <vector>
+#include <chrono>
+#include <limits>
+#include <algorithm>
+
+using namespace std;
+
+const int INF = numeric_limits<int>::max();
+
+// Structure to hold the results of our Bellman-Ford execution
+struct BellmanFordResult {
+    vector<int> path;
+    int total_cost;
+    int edges_relaxed; // Represents the computational workload
+    double execution_time_ms;
+    bool has_negative_cycle;
+};
+
+BellmanFordResult bellmanFord(int source, int destination, int num_nodes,
+    const vector<vector<pair<int, int>>>& graph) {
+
+    // Start the timer
+    auto start_time = chrono::high_resolution_clock::now();
+
+    // Distance array to store the shortest path estimates
+    vector<int> distance(num_nodes, INF);
+
+    // Array to reconstruct the shortest path
+    vector<int> parent(num_nodes, -1);
+
+    int edges_relaxed = 0;
+    bool has_negative_cycle = false;
+
+    // Initialize source node
+    distance[source] = 0;
+
+    // Step 1: Relax all edges (V - 1) times
+    for (int i = 0; i < num_nodes - 1; ++i) {
+        for (int u = 0; u < num_nodes; ++u) {
+            // Only proceed if the node has been reached
+            if (distance[u] != INF) {
+                for (const auto& edge : graph[u]) {
+                    int v = edge.first;
+                    int weight = edge.second;
+
+                    // Increment operations counter for benchmarking
+                    edges_relaxed++;
+
+                    // Relaxation step
+                    if (distance[u] + weight < distance[v]) {
+                        distance[v] = distance[u] + weight;
+                        parent[v] = u;
+                    }
+                }
+            }
+        }
+    }
+
+    // Step 2: Perform an additional iteration to detect negative cycles
+    for (int u = 0; u < num_nodes; ++u) {
+        if (distance[u] != INF) {
+            for (const auto& edge : graph[u]) {
+                int v = edge.first;
+                int weight = edge.second;
+
+                edges_relaxed++;
+
+                // If we can still relax an edge, a negative cycle exists
+                if (distance[u] + weight < distance[v]) {
+                    has_negative_cycle = true;
+                }
+            }
+        }
+    }
+
+    // Stop the timer
+    auto stop_time = chrono::high_resolution_clock::now();
+    chrono::duration<double, milli> duration = stop_time - start_time;
+
+    // Path reconstruction (only if no negative cycle corrupted the path)
+    vector<int> path;
+    if (!has_negative_cycle && distance[destination] != INF) {
+        for (int curr = destination; curr != -1; curr = parent[curr]) {
+            path.push_back(curr);
+        }
+        reverse(path.begin(), path.end());
+    }
+
+    return { path, distance[destination], edges_relaxed, duration.count(), has_negative_cycle };
+}
+
+int main() {
+    // 1. Graph Construction (Testing with a negative cycle)
+    int num_nodes = 5;
+    vector<vector<pair<int, int>>> graph(num_nodes);
+
+    // Adding edges: graph[u].push_back({v, weight});
+    // This specific graph contains a negative cycle: 1 -> 2 -> 3 -> 1 (Weight: 3 - 6 + 2 = -1)
+    graph[0].push_back({ 1, 5 });
+    graph[1].push_back({ 2, 3 });
+    graph[2].push_back({ 3, -6 }); // Negative weight
+    graph[3].push_back({ 1, 2 });  // Completes the negative cycle
+    graph[2].push_back({ 4, 4 });
+
+    int source = 0;
+    int destination = 4;
+
+    // 2. Execute Bellman-Ford Algorithm
+    BellmanFordResult result = bellmanFord(source, destination, num_nodes, graph);
+
+    // 3. Output Benchmark Metrics
+    cout << "--- Bellman-Ford Algorithm Results ---" << endl;
+
+    if (result.has_negative_cycle) {
+        cout << "ALERT: Graph contains a negative weight cycle! Shortest paths are invalid." << endl;
+    }
+    else if (result.total_cost == INF) {
+        cout << "No path found to destination." << endl;
+    }
+    else {
+        cout << "Path: ";
+        for (size_t i = 0; i < result.path.size(); ++i) {
+            cout << result.path[i] << (i == result.path.size() - 1 ? "" : " -> ");
+        }
+        cout << "\nTotal Path Cost: " << result.total_cost << endl;
+    }
+
+    cout << "Edges Relaxed (Workload): " << result.edges_relaxed << endl;
+    cout << "Execution Time: " << result.execution_time_ms << " ms" << endl;
+
+    return 0;
+}

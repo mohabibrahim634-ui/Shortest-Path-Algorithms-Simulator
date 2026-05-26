@@ -1,0 +1,135 @@
+#include <iostream>
+#include <vector>
+#include <queue>
+#include <chrono>
+#include <limits>
+#include <algorithm>
+
+using namespace std;
+
+const int INF = numeric_limits<int>::max();
+
+// Structure to hold the results of our A* execution
+struct AStarResult {
+    vector<int> path;
+    int total_cost;
+    int nodes_explored;
+    double execution_time_ms;
+};
+
+AStarResult aStarSearch(int source, int destination, int num_nodes,
+    const vector<vector<pair<int, int>>>& graph,
+    const vector<int>& heuristic) {
+
+    // Start the timer
+    auto start_time = chrono::high_resolution_clock::now();
+
+    // Priority queue stores pairs of {f_cost, node_index}
+    // min-heap to always expand the node with the lowest f(n)
+    priority_queue<pair<int, int>, vector<pair<int, int>>, greater<pair<int, int>>> pq;
+
+    // Distance array to store the actual cost from source to a node, g(n)
+    vector<int> g_cost(num_nodes, INF);
+
+    // Array to reconstruct the shortest path
+    vector<int> parent(num_nodes, -1);
+
+    int nodes_explored = 0;
+
+    // Initialize source node
+    g_cost[source] = 0;
+    pq.push({ g_cost[source] + heuristic[source], source });
+
+    while (!pq.empty()) {
+        int current_f = pq.top().first;
+        int u = pq.top().second;
+        pq.pop();
+
+        // Increment explored nodes counter for benchmarking
+        nodes_explored++;
+
+        // If we reached the destination, we can stop early (Greedy optimization)
+        if (u == destination) {
+            break;
+        }
+
+        // Skip if we found a shorter path to 'u' already
+        if (current_f > g_cost[u] + heuristic[u]) {
+            continue;
+        }
+
+        // Expand neighbors
+        for (const auto& edge : graph[u]) {
+            int v = edge.first;
+            int weight = edge.second;
+
+            // Relaxation step: if a shorter path to v is found
+            if (g_cost[u] + weight < g_cost[v]) {
+                g_cost[v] = g_cost[u] + weight;
+                parent[v] = u;
+
+                // f(n) = g(n) + h(n)
+                int f_cost = g_cost[v] + heuristic[v];
+                pq.push({ f_cost, v });
+            }
+        }
+    }
+
+    // Stop the timer
+    auto stop_time = chrono::high_resolution_clock::now();
+    chrono::duration<double, milli> duration = stop_time - start_time;
+
+    // Path reconstruction
+    vector<int> path;
+    if (g_cost[destination] != INF) {
+        for (int curr = destination; curr != -1; curr = parent[curr]) {
+            path.push_back(curr);
+        }
+        reverse(path.begin(), path.end());
+    }
+
+    return { path, g_cost[destination], nodes_explored, duration.count() };
+}
+
+int main() {
+    // 1. Graph Construction
+    int num_nodes = 5;
+    vector<vector<pair<int, int>>> graph(num_nodes);
+
+    // Adding edges: graph[u].push_back({v, weight});
+    graph[0].push_back({ 1, 4 });
+    graph[0].push_back({ 2, 1 });
+    graph[2].push_back({ 1, 2 });
+    graph[1].push_back({ 3, 1 });
+    graph[2].push_back({ 3, 5 });
+    graph[3].push_back({ 4, 3 });
+
+    // 2. Heuristic Array (h(n))
+    // In a real grid, this would be Manhattan or Euclidean distance to the target.
+    // Here we use mock heuristic values estimating distance to node 4.
+    vector<int> heuristic = { 6, 2, 5, 2, 0 };
+
+    int source = 0;
+    int destination = 4;
+
+    // 3. Execute A* Algorithm
+    AStarResult result = aStarSearch(source, destination, num_nodes, graph, heuristic);
+
+    // 4. Output Benchmark Metrics
+    cout << "--- A* Algorithm Results ---" << endl;
+    if (result.total_cost == INF) {
+        cout << "No path found to destination." << endl;
+    }
+    else {
+        cout << "Path: ";
+        for (size_t i = 0; i < result.path.size(); ++i) {
+            cout << result.path[i] << (i == result.path.size() - 1 ? "" : " -> ");
+        }
+        cout << "\nTotal Path Cost: " << result.total_cost << endl;
+    }
+
+    cout << "Nodes Explored: " << result.nodes_explored << endl;
+    cout << "Execution Time: " << result.execution_time_ms << " ms" << endl;
+
+    return 0;
+}
